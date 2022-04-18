@@ -74,8 +74,6 @@ int main(){
     int cap = 0;
     char str[2048];
     bool flag = true;
-//    printf("insert a capacity for the stack\n");
-//    scanf("%d", &cap);
     stack_point stack = init_stack();
     while(flag){
         printf("insert command\n");

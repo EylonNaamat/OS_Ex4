@@ -16,8 +16,8 @@ typedef struct Stack{
     int capacity;
 } Stack, *stack_point;
 
-stack_point init_stack(int capacity){
-    stack_point new_stack = (stack_point)(malloc(capacity * sizeof(Stack)));
+stack_point init_stack(){
+    stack_point new_stack = (stack_point)(malloc(sizeof(Stack)));
     if(new_stack){
         new_stack->head = NULL;
         new_stack->capacity = 0;
@@ -73,10 +73,11 @@ void destroy_stack(stack_point curr_stack){
 int main(){
     int cap = 0;
     char str[2048];
+    bool flag = true;
 //    printf("insert a capacity for the stack\n");
 //    scanf("%d", &cap);
-    stack_point stack = init_stack(5);
-    for(;;){
+    stack_point stack = init_stack();
+    while(flag){
         printf("insert command\n");
         fgets(str, 2048, stdin);
         size_t ln = strlen(str)-1;
@@ -89,9 +90,17 @@ int main(){
             data = strtok(NULL, " ");
             push(stack, data);
         }else if(!(strcmp(data, "TOP"))){
-            printf("OUTPUT: %s\n", top(stack));
+            if(!top(stack)){
+                printf("ERROR: stack is empty\n");
+            }else{
+                printf("OUTPUT: %s\n", top(stack));
+            }
         }else if(!(strcmp(data, "POP"))){
-            pop(stack);
+            if(!pop(stack)){
+                printf("ERROR: stack is empty\n");
+            }
+        }else if(!(strcmp(data, "EXIT"))){
+            flag = false;
         }else{
             printf("ERROR: illegal command\n");
             return -1;

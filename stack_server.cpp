@@ -15,7 +15,7 @@
 #include <signal.h>
 #include <pthread.h>
 
-#define PORT "3506"  // the port users will be connecting to
+#define PORT "3520"  // the port users will be connecting to
 
 #define BACKLOG 10   // how many pending connections queue will hold
 
@@ -258,13 +258,24 @@ int main(void)
             if (buf[ln] == '\n') {
                 buf[ln] = '\0';
             }
-            char* data = strtok(buf, " ");
-            if(!(strcmp(data, "PUSH"))) {
-                data = strtok(NULL, " ");
+            char command[5];
+            int j;
+            for(j = 0; buf[j] != ' ' && buf[j] != '\0'; ++j){
+                command[j] = buf[j];
+            }
+            command[j] = '\0';
+
+            if(!(strcmp(command, "PUSH"))) {
                 push_arg_point push_struct = (push_arg_point)(malloc(sizeof(push_arg)));
                 push_struct->stack = stack;
-                char* copy = (char*)(malloc(strlen(data) +1));
-                strcpy(copy, data);
+                char copy[2048];
+                int k;
+                j = j+1;
+                for(k = 0; buf[j] != '\0'; ++k, ++j){
+
+                    copy[k] = buf[j];
+                }
+                copy[k] = '\0';
                 push_struct->data = copy;
 
                 if(pthread_create(&thread_id[i], NULL, push, (void*)(push_struct)) != 0){
@@ -274,20 +285,20 @@ int main(void)
                 pthread_join(thread_id[i], NULL);
                 i++;
 
-            }else if(!(strcmp(data, "TOP"))) {
+            }else if(!(strcmp(command, "TOP"))) {
                 if (pthread_create(&thread_id[i], NULL, top, (stack)) != 0) {
                     printf("thread creation failed\n");
                 }
                 pthread_join(thread_id[i], NULL);
                 i++;
 
-            }else if(!(strcmp(data, "POP"))){
+            }else if(!(strcmp(command, "POP"))){
                 if(pthread_create(&thread_id[i], NULL, pop, (stack)) != 0){
                     printf("thread creation failed\n");
                 }
                 pthread_join(thread_id[i], NULL);
                 i++;
-            }else if(!(strcmp(data, "EXIT"))){
+            }else if(!(strcmp(command, "EXIT"))){
                 break;
             }else{
                 printf("ERROR: illegal command\n");

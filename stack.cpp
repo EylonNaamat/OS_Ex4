@@ -5,6 +5,71 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <unistd.h>
+#include <stdio.h>
+
+typedef struct block_info {
+    int free;
+    size_t data_size;
+    struct block_info* next_block;
+} block_info;
+
+//static block_info firest_head= {0,0,NULL};
+static block_info* last_head = NULL;
+void *my_malloc(size_t get_size)
+{
+    block_info* block= last_head;
+    size_t size = get_size + sizeof(block_info);
+    while (block!= NULL)
+    {
+        if(block->free != 0)
+        {
+            if(block->data_size>=get_size)
+            {
+                block->free =1;
+                return (void*)block + sizeof(block_info);
+            }
+        }
+        block = block->next_block;
+    }
+
+
+    block_info* new_block = (block_info*)sbrk(size);
+    new_block->data_size=get_size;
+    new_block->free = 0;
+    new_block->next_block =last_head;
+    last_head = new_block;
+    return (void*) new_block+sizeof(get_size);
+}
+
+
+void my_free(void * my_point)
+{
+    block_info* my_block =(block_info*)my_point - sizeof(block_info);
+    my_block->free =1;
+    if(my_block+((my_block->data_size+sizeof(block_info)))== sbrk(0))
+    {
+        while(my_block!=NULL)
+        {
+            if(my_block->free == 0)
+            {
+                break;
+            }
+            else
+            {
+                sbrk(-(my_block->data_size+sizeof(block_info)));
+            }
+            my_block = my_block->next_block;
+        }
+        last_head = my_block;
+    }
+}
+
+
+
+
+
+
 typedef struct Stack_node{
     char* data;
     struct Stack_node* next;
@@ -17,7 +82,7 @@ typedef struct Stack{
 } Stack, *stack_point;
 
 stack_point init_stack(){
-    stack_point new_stack = (stack_point)(malloc(sizeof(Stack)));
+    stack_point new_stack = (stack_point)(my_malloc(sizeof(Stack)));
     if(new_stack){
         new_stack->head = NULL;
         new_stack->capacity = 0;
@@ -26,9 +91,9 @@ stack_point init_stack(){
 }
 
 bool push(stack_point curr_stack, char* data){
-    stack_node_point new_elem = (stack_node_point)(malloc(sizeof(Stack_node)));
+    stack_node_point new_elem = (stack_node_point)(my_malloc(sizeof(Stack_node)));
     if(new_elem){
-        char* copy = (char*)(malloc(strlen(data) +1));
+        char* copy = (char*)(my_malloc(strlen(data) +1));
         strcpy(copy, data);
         new_elem->data = copy;
         new_elem->next = curr_stack->head;
@@ -43,8 +108,8 @@ bool pop(stack_point curr_stack){
     if(curr_stack->capacity != 0){
         stack_node_point top = curr_stack->head;
         curr_stack->head = curr_stack->head->next;
-        free(top->data);
-        free(top);
+        my_free(top->data);
+        my_free(top);
         (curr_stack->capacity)--;
         return true;
     }
@@ -66,7 +131,7 @@ void clear(stack_point curr_stack){
 
 void destroy_stack(stack_point curr_stack){
     clear(curr_stack);
-    free(curr_stack);
+    my_free(curr_stack);
 }
 
 

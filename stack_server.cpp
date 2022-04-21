@@ -15,7 +15,7 @@
 #include <signal.h>
 #include <pthread.h>
 
-#define PORT "3493"  // the port users will be connecting to
+#define PORT "3495"  // the port users will be connecting to
 
 #define BACKLOG 10   // how many pending connections queue will hold
 
@@ -32,14 +32,6 @@ typedef struct Stack{
     int capacity;
 } Stack, *stack_point;
 
-typedef struct push_arg{
-    stack_point stack;
-    char* data;
-}push_arg, *push_arg_point;
-
-//typedef struct top_arg{
-//
-//};
 
 
 
@@ -66,15 +58,15 @@ stack_point init_stack(){
 
 void* push(void* arg){
     pthread_mutex_lock(&mutex_push);
-    push_arg_point tmp = (push_arg_point)(arg);
+    char* data = (char*)(arg);
     stack_node_point new_elem = (stack_node_point)(malloc(sizeof(Stack_node)));
     if(new_elem){
-        char* copy = (char*)(malloc(strlen(tmp->data) +1));
-        strcpy(copy, tmp->data);
+        char* copy = (char*)(malloc(strlen(data) +1));
+        strcpy(copy, data);
         new_elem->data = copy;
-        new_elem->next = tmp->stack->head;
-        tmp->stack->head = new_elem;
-        (tmp->stack->capacity)++;
+        new_elem->next = stack->head;
+        stack->head = new_elem;
+        (stack->capacity)++;
     }
     pthread_mutex_unlock(&mutex_push);
 }
@@ -97,8 +89,8 @@ void* pop(void* arg){
 void* top(void* arg){
     pthread_mutex_lock(&mutex_top);
     int* new_sock = (int*)(arg);
-    char buf[2048] = "OUTPUT: ";
     if(stack->capacity != 0){
+        char buf[2048] = "OUTPUT: ";
         int i;
         int j = 0;
         for(i = strlen(buf); (stack->head->data)[j] != '\0'; ++i, ++j){
@@ -106,9 +98,9 @@ void* top(void* arg){
         }
         (stack->head->data)[i] = '\0';
         send((*new_sock), buf, 2048, 0);
-        printf("OUTPUT: %s\n", stack->head->data);
     }else {
-        printf("ERROR: stack is empty\n");
+        char buf[2048] = "ERROR: stack is empty";
+        send((*new_sock), buf, 2048, 0);
     }
     pthread_mutex_unlock(&mutex_top);
 }
@@ -280,8 +272,6 @@ int main(void)
             command[j] = '\0';
 
             if(!(strcmp(command, "PUSH"))) {
-                push_arg_point push_struct = (push_arg_point)(malloc(sizeof(push_arg)));
-                push_struct->stack = stack;
                 char copy[2048];
                 int k;
                 j = j+1;
@@ -290,9 +280,7 @@ int main(void)
                     copy[k] = buf[j];
                 }
                 copy[k] = '\0';
-                push_struct->data = copy;
-
-                if(pthread_create(&thread_id[i], NULL, push, (void*)(push_struct)) != 0){
+                if(pthread_create(&thread_id[i], NULL, push, (void*)(copy)) != 0){
                     printf("thread creation failed\n");
                 }
 

@@ -15,7 +15,7 @@
 #include <signal.h>
 #include <pthread.h>
 
-#define PORT "3520"  // the port users will be connecting to
+#define PORT "3493"  // the port users will be connecting to
 
 #define BACKLOG 10   // how many pending connections queue will hold
 
@@ -36,6 +36,12 @@ typedef struct push_arg{
     stack_point stack;
     char* data;
 }push_arg, *push_arg_point;
+
+//typedef struct top_arg{
+//
+//};
+
+
 
 // global variables
 pthread_mutex_t mutex_push;
@@ -90,9 +96,17 @@ void* pop(void* arg){
 
 void* top(void* arg){
     pthread_mutex_lock(&mutex_top);
-    stack_point curr_stack = (stack_point)(arg);
-    if(curr_stack->capacity != 0){
-        printf("OUTPUT: %s\n", curr_stack->head->data);
+    int* new_sock = (int*)(arg);
+    char buf[2048] = "OUTPUT: ";
+    if(stack->capacity != 0){
+        int i;
+        int j = 0;
+        for(i = strlen(buf); (stack->head->data)[j] != '\0'; ++i, ++j){
+            buf[i] = (stack->head->data)[j];
+        }
+        (stack->head->data)[i] = '\0';
+        send((*new_sock), buf, 2048, 0);
+        printf("OUTPUT: %s\n", stack->head->data);
     }else {
         printf("ERROR: stack is empty\n");
     }
@@ -286,7 +300,7 @@ int main(void)
                 i++;
 
             }else if(!(strcmp(command, "TOP"))) {
-                if (pthread_create(&thread_id[i], NULL, top, (stack)) != 0) {
+                if (pthread_create(&thread_id[i], NULL, top, (void*)(&new_fd)) != 0) {
                     printf("thread creation failed\n");
                 }
                 pthread_join(thread_id[i], NULL);

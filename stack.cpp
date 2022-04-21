@@ -14,7 +14,6 @@ typedef struct block_info {
     struct block_info* next_block;
 } block_info;
 
-//static block_info firest_head= {0,0,NULL};
 static block_info* last_head = NULL;
 void *my_malloc(size_t get_size)
 {
@@ -27,27 +26,26 @@ void *my_malloc(size_t get_size)
             if(block->data_size>=get_size)
             {
                 block->free =1;
-                return (void*)block + sizeof(block_info);
+                return ((void*)block) + sizeof(block_info);
             }
         }
         block = block->next_block;
     }
-
-
+    printf("4......\n");
     block_info* new_block = (block_info*)sbrk(size);
     new_block->data_size=get_size;
     new_block->free = 0;
     new_block->next_block =last_head;
     last_head = new_block;
-    return (void*) new_block+sizeof(get_size);
+    return ((void*)new_block) +sizeof(block_info);
 }
 
 
 void my_free(void * my_point)
 {
-    block_info* my_block =(block_info*)my_point - sizeof(block_info);
+    block_info* my_block =(block_info*)(my_point - sizeof(block_info));
     my_block->free =1;
-    if(my_block+((my_block->data_size+sizeof(block_info)))== sbrk(0))
+    if(my_point+((my_block->data_size))== sbrk(0))
     {
         while(my_block!=NULL)
         {

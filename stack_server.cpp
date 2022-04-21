@@ -15,14 +15,11 @@
 #include <signal.h>
 #include <pthread.h>
 
-#define PORT "3509"  // the port users will be connecting to
+#define PORT "3506"  // the port users will be connecting to
 
 #define BACKLOG 10   // how many pending connections queue will hold
 
 
-pthread_mutex_t mutex_push;
-pthread_mutex_t mutex_top;
-pthread_mutex_t mutex_pop;
 
 typedef struct Stack_node{
     char* data;
@@ -39,6 +36,18 @@ typedef struct push_arg{
     stack_point stack;
     char* data;
 }push_arg, *push_arg_point;
+
+// global variables
+pthread_mutex_t mutex_push;
+pthread_mutex_t mutex_top;
+pthread_mutex_t mutex_pop;
+stack_point stack;
+int sockfd;
+int new_fd;
+
+
+
+
 
 stack_point init_stack(){
     stack_point new_stack = (stack_point)(malloc(sizeof(Stack)));
@@ -112,6 +121,23 @@ void sigchld_handler(int s)
     errno = saved_errno;
 }
 
+void sigint_handler(int num){
+    printf("destroy stack\n");
+    destroy_stack(stack);
+    printf("close client socket\n");
+    close(new_fd);
+//    printf("close socket\n");
+//    close(sockfd);
+    printf("closing push mutex\n");
+    pthread_mutex_destroy(&mutex_push);
+    printf("closing top mutex\n");
+    pthread_mutex_destroy(&mutex_top);
+    printf("closing pop mutex\n");
+    pthread_mutex_destroy(&mutex_pop);
+    exit(1);
+}
+
+
 
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -136,7 +162,7 @@ void* sender(void* arg){
 
 int main(void)
 {
-    int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
+    // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *servinfo, *p;
     struct sockaddr_storage their_addr; // connector's address information
     socklen_t sin_size;
@@ -203,10 +229,12 @@ int main(void)
 
     int i = 0;
     pthread_t thread_id[10];
-    stack_point stack = init_stack();
+    stack = init_stack();
     pthread_mutex_init(&mutex_push, NULL);
     pthread_mutex_init(&mutex_top, NULL);
     pthread_mutex_init(&mutex_pop, NULL);
+
+    signal(SIGINT, sigint_handler);
 
 
     while(1) {  // main accept() loop
@@ -267,8 +295,17 @@ int main(void)
             }
         }
     }
+    printf("destroy stack\n");
+    destroy_stack(stack);
+    printf("close client socket\n");
+    close(new_fd);
+    printf("close socket\n");
+    close(sockfd);
+    printf("closing push mutex\n");
     pthread_mutex_destroy(&mutex_push);
+    printf("closing top mutex\n");
     pthread_mutex_destroy(&mutex_top);
+    printf("closing pop mutex\n");
     pthread_mutex_destroy(&mutex_pop);
     return 0;
 }

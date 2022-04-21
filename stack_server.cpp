@@ -15,7 +15,7 @@
 #include <signal.h>
 #include <pthread.h>
 
-#define PORT "3495"  // the port users will be connecting to
+#define PORT "3403"  // the port users will be connecting to
 
 #define BACKLOG 10   // how many pending connections queue will hold
 
@@ -73,15 +73,18 @@ void* push(void* arg){
 
 void* pop(void* arg){
     pthread_mutex_lock(&mutex_pop);
-    stack_point curr_stack = (stack_point)(arg);
-    if(curr_stack->capacity != 0){
-        stack_node_point top = curr_stack->head;
-        curr_stack->head = curr_stack->head->next;
+    int* new_sock = (int*)(arg);
+    if(stack->capacity != 0){
+        stack_node_point top = stack->head;
+        stack->head = stack->head->next;
         free(top->data);
         free(top);
-        (curr_stack->capacity)--;
+        (stack->capacity)--;
+        char buf[2048] = "OUTPUT: popping";
+        send((*new_sock), buf, 2048, 0);
     }else{
-        printf("ERROR: stack is empty\n");
+        char buf[2048] = "ERROR: stack is empty";
+        send((*new_sock), buf, 2048, 0);
     }
     pthread_mutex_unlock(&mutex_pop);
 }
@@ -295,7 +298,7 @@ int main(void)
                 i++;
 
             }else if(!(strcmp(command, "POP"))){
-                if(pthread_create(&thread_id[i], NULL, pop, (stack)) != 0){
+                if(pthread_create(&thread_id[i], NULL, pop, (void*)(&new_fd)) != 0){
                     printf("thread creation failed\n");
                 }
                 pthread_join(thread_id[i], NULL);

@@ -16,10 +16,12 @@
 #include <signal.h>
 #include <pthread.h>
 
-#define PORT "3424"  // the port users will be connecting to
+#define PORT "3427"  // the port users will be connecting to
 
 #define BACKLOG 10   // how many pending connections queue will hold
-////////////// free and maloc
+
+
+////////////// free and malloc
 typedef struct block_info {
     int free;
     size_t data_size;
@@ -106,13 +108,10 @@ void my_free(void * my_point)
         last_head = my_block;
     }
 }
-
 /////////end free and maloc
 
 
-/////////// stack 
-
-
+/////////// stack
 typedef struct Stack_node{
     char* data;
     struct Stack_node* next;
@@ -127,13 +126,12 @@ typedef struct Stack{
 
 
 
-// global variables
-pthread_mutex_t mutex_push;
+////// global variables
+pthread_mutex_t mutex;
 //pthread_mutex_t mutex_top;
 //pthread_mutex_t mutex_pop;
 stack_point stack;
-
-
+int new_fd[10];
 
 
 
@@ -147,7 +145,7 @@ stack_point init_stack(){
 }
 
 void* push(char* data){
-    pthread_mutex_lock(&mutex_push);
+    pthread_mutex_lock(&mutex);
     stack_node_point new_elem = (stack_node_point)(my_malloc(sizeof(Stack_node)));
     if(new_elem){
         char* copy = (char*)(my_malloc(strlen(data) +1));
@@ -157,27 +155,27 @@ void* push(char* data){
         stack->head = new_elem;
         (stack->capacity)++;
     }
-    pthread_mutex_unlock(&mutex_push);
+    pthread_mutex_unlock(&mutex);
 }
 
 bool pop(){
-    pthread_mutex_lock(&mutex_push);
+    pthread_mutex_lock(&mutex);
     if(stack->capacity != 0){
         stack_node_point top = stack->head;
         stack->head = stack->head->next;
         my_free(top->data);
         my_free(top);
         (stack->capacity)--;
-        pthread_mutex_unlock(&mutex_push);
+        pthread_mutex_unlock(&mutex);
         return true;
     }else{
-        pthread_mutex_unlock(&mutex_push);
+        pthread_mutex_unlock(&mutex);
         return false;
     }
 }
 
 void* top(int* new_sock){
-    pthread_mutex_lock(&mutex_push);
+    pthread_mutex_lock(&mutex);
     if(stack->capacity != 0){
         char buf[2048] = "OUTPUT: ";
         int i;
@@ -191,7 +189,7 @@ void* top(int* new_sock){
         char buf[2048] = "ERROR: stack is empty";
         send((*new_sock), buf, 2048, 0);
     }
-    pthread_mutex_unlock(&mutex_push);
+    pthread_mutex_unlock(&mutex);
 }
 
 void clear(stack_point curr_stack){
@@ -205,10 +203,9 @@ void destroy_stack(stack_point curr_stack){
     clear(curr_stack);
     my_free(curr_stack);
 }
-
-
-
 //////////end stack
+
+
 void sigchld_handler(int s)
 {
     // waitpid() might overwrite errno, so we save and restore it:
@@ -229,6 +226,18 @@ void *get_in_addr(struct sockaddr *sa)
     }
 
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
+void sigint_handler(int num){
+    printf("destroy stack\n");
+    destroy_stack(stack);
+    printf("close client sockets\n");
+    for(int i = 0; i < 10; ++i){
+        close(new_fd[i]);
+    }
+    printf("closing mutex\n");
+    pthread_mutex_destroy(&mutex);
+    exit(1);
 }
 
 
@@ -283,7 +292,7 @@ void* sender(void* arg)
 
 int main(void)
 {
-    int sockfd, new_fd[10];  // listen on sock_fd, new connection on new_fd
+    int sockfd;  // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *servinfo, *p;
     struct sockaddr_storage their_addr; // connector's address information
     socklen_t sin_size;
@@ -353,9 +362,8 @@ int main(void)
 
 
     stack = init_stack();
-    pthread_mutex_init(&mutex_push, NULL);
-    //pthread_mutex_init(&mutex_top, NULL);
-    //pthread_mutex_init(&mutex_pop, NULL);
+    pthread_mutex_init(&mutex, NULL);
+    signal(SIGINT, sigint_handler);
 
     while(1) {  // main accept() loop
         sin_size = sizeof their_addr;

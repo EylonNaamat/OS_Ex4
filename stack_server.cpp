@@ -1,6 +1,10 @@
 //
 // Created by eylon on 4/19/22.
 //
+/*
+** server.c -- a stream socket server demo
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -15,10 +19,12 @@
 #include <signal.h>
 #include <pthread.h>
 
-#define PORT "3400"  // the port users will be connecting to
+#define PORT "3427"  // the port users will be connecting to
 
 #define BACKLOG 10   // how many pending connections queue will hold
 
+
+////////////// free and malloc
 typedef struct block_info {
     int free;
     size_t data_size;
@@ -51,6 +57,35 @@ void *my_malloc(size_t get_size)
     return ((void*)new_block) +sizeof(block_info);
 }
 
+// void *my_calloc(size_t get_numbers,size_t get_one_size)
+// {
+//     size_t get_size = get_one_size*get_numbers;
+//     block_info* block= last_head;
+//     size_t size = get_size + sizeof(block_info);
+//     while (block!= NULL)
+//     {
+//         if(block->free != 0)
+//         {
+//             if(block->data_size>=get_size)
+//             {
+//                 block->free =0;
+//                 for(int i=0;i<get_size;i++)
+//                 {
+//                     *(((void*)block)+sizeof(block_info)+i) = 0;
+//                 }
+//                 return ((void*)block) + sizeof(block_info);
+//             }
+//         }
+//         block = block->next_block;
+//     }
+
+//     block_info* new_block = (block_info*)sbrk(size);
+//     new_block->data_size=get_size;
+//     new_block->free = 0;
+//     new_block->next_block =last_head;
+//     last_head = new_block;
+//     return ((void*)new_block) +sizeof(block_info);
+// }
 
 void my_free(void * my_point)
 {
@@ -76,7 +111,10 @@ void my_free(void * my_point)
         last_head = my_block;
     }
 }
+/////////end free and maloc
 
+
+/////////// stack
 typedef struct Stack_node{
     char* data;
     struct Stack_node* next;
@@ -91,15 +129,12 @@ typedef struct Stack{
 
 
 
-// global variables
-pthread_mutex_t mutex_push;
-pthread_mutex_t mutex_top;
-pthread_mutex_t mutex_pop;
+////// global variables
+pthread_mutex_t mutex;
+//pthread_mutex_t mutex_top;
+//pthread_mutex_t mutex_pop;
 stack_point stack;
-int sockfd;
-int new_fd;
-
-
+int new_fd[10];
 
 
 
@@ -112,9 +147,8 @@ stack_point init_stack(){
     return new_stack;
 }
 
-void* push(void* arg){
-    pthread_mutex_lock(&mutex_push);
-    char* data = (char*)(arg);
+void* push(char* data){
+    pthread_mutex_lock(&mutex);
     stack_node_point new_elem = (stack_node_point)(my_malloc(sizeof(Stack_node)));
     if(new_elem){
         char* copy = (char*)(my_malloc(strlen(data) +1));
@@ -124,30 +158,27 @@ void* push(void* arg){
         stack->head = new_elem;
         (stack->capacity)++;
     }
-    pthread_mutex_unlock(&mutex_push);
+    pthread_mutex_unlock(&mutex);
 }
 
-void* pop(void* arg){
-    pthread_mutex_lock(&mutex_pop);
-    int* new_sock = (int*)(arg);
+bool pop(){
+    pthread_mutex_lock(&mutex);
     if(stack->capacity != 0){
         stack_node_point top = stack->head;
         stack->head = stack->head->next;
         my_free(top->data);
         my_free(top);
         (stack->capacity)--;
-        char buf[2048] = "OUTPUT: popping";
-        send((*new_sock), buf, 2048, 0);
+        pthread_mutex_unlock(&mutex);
+        return true;
     }else{
-        char buf[2048] = "ERROR: stack is empty";
-        send((*new_sock), buf, 2048, 0);
+        pthread_mutex_unlock(&mutex);
+        return false;
     }
-    pthread_mutex_unlock(&mutex_pop);
 }
 
-void* top(void* arg){
-    pthread_mutex_lock(&mutex_top);
-    int* new_sock = (int*)(arg);
+void* top(int* new_sock){
+    pthread_mutex_lock(&mutex);
     if(stack->capacity != 0){
         char buf[2048] = "OUTPUT: ";
         int i;
@@ -161,12 +192,13 @@ void* top(void* arg){
         char buf[2048] = "ERROR: stack is empty";
         send((*new_sock), buf, 2048, 0);
     }
-    pthread_mutex_unlock(&mutex_top);
+    pthread_mutex_unlock(&mutex);
 }
 
 void clear(stack_point curr_stack){
     while(curr_stack->capacity){
-        pop(curr_stack);
+        char ans[2048];
+        pop();
     }
 }
 
@@ -174,6 +206,7 @@ void destroy_stack(stack_point curr_stack){
     clear(curr_stack);
     my_free(curr_stack);
 }
+//////////end stack
 
 
 void sigchld_handler(int s)
@@ -186,25 +219,9 @@ void sigchld_handler(int s)
     errno = saved_errno;
 }
 
-void sigint_handler(int num){
-    printf("destroy stack\n");
-    destroy_stack(stack);
-    printf("close client socket\n");
-    close(new_fd);
-//    printf("close socket\n");
-//    close(sockfd);
-    printf("closing push mutex\n");
-    pthread_mutex_destroy(&mutex_push);
-    printf("closing top mutex\n");
-    pthread_mutex_destroy(&mutex_top);
-    printf("closing pop mutex\n");
-    pthread_mutex_destroy(&mutex_pop);
-    exit(1);
-}
-
-
 
 // get sockaddr, IPv4 or IPv6:
+
 void *get_in_addr(struct sockaddr *sa)
 {
     if (sa->sa_family == AF_INET) {
@@ -214,20 +231,71 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
+void sigint_handler(int num){
+    printf("destroy stack\n");
+    destroy_stack(stack);
+    printf("close client sockets\n");
+    for(int i = 0; i < 10; ++i){
+        close(new_fd[i]);
+    }
+    printf("closing mutex\n");
+    pthread_mutex_destroy(&mutex);
+    exit(1);
+}
 
-void* sender(void* arg){
+
+void* sender(void* arg)
+{
     int * new_fd = (int*)arg;
-    if(send((*new_fd), "Hello, world!", 13, 0)== -1){
-        close((*new_fd));
-        exit(0);
+    char buf[2048];
+
+    while(recv(*new_fd, buf, 2048, 0) != -1){
+        size_t ln = strlen(buf)-1;
+        if (buf[ln] == '\n') {
+            buf[ln] = '\0';
+        }
+        char command[5];
+        int j;
+        for(j = 0; buf[j] != ' ' && buf[j] != '\0'; ++j){
+            command[j] = buf[j];
+        }
+        command[j] = '\0';
+
+        if(!(strcmp(command, "PUSH"))) {
+            char copy[2048];
+            int k;
+            j = j+1;
+            for(k = 0; buf[j] != '\0'; ++k, ++j){
+                copy[k] = buf[j];
+            }
+            copy[k] = '\0';
+            push(copy);
+
+        }else if(!(strcmp(command, "TOP"))) {
+            top(new_fd);
+        }else if(!(strcmp(command, "POP"))){
+            if(pop())
+            {
+                send((*new_fd), "OUTPUT: popping", 2048, 0);
+            }
+            else{
+                send((*new_fd), "ERROR: stack is empty", 2048, 0);
+            }
+        }else if(!(strcmp(command, "EXIT"))){
+            break;
+        }else{
+            printf("ERROR: illegal command\n");
+            break;
+        }
     }
     close((*new_fd));
+
 }
 
 
 int main(void)
 {
-    // listen on sock_fd, new connection on new_fd
+    int sockfd;  // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *servinfo, *p;
     struct sockaddr_storage their_addr; // connector's address information
     socklen_t sin_size;
@@ -235,7 +303,6 @@ int main(void)
     int yes=1;
     char s[INET6_ADDRSTRLEN];
     int rv;
-    char buf[2048];
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
@@ -294,18 +361,17 @@ int main(void)
 
     int i = 0;
     pthread_t thread_id[10];
+
+
+
     stack = init_stack();
-    pthread_mutex_init(&mutex_push, NULL);
-    pthread_mutex_init(&mutex_top, NULL);
-    pthread_mutex_init(&mutex_pop, NULL);
-
+    pthread_mutex_init(&mutex, NULL);
     signal(SIGINT, sigint_handler);
-
 
     while(1) {  // main accept() loop
         sin_size = sizeof their_addr;
-        new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
-        if (new_fd == -1) {
+        new_fd[i] = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
+        if (new_fd[i] == -1) {
             perror("accept");
             continue;
         }
@@ -315,66 +381,17 @@ int main(void)
                   s, sizeof s);
         printf("server: got connection from %s\n", s);
 
-        if(recv(new_fd, buf, 2048, 0) != -1){
-            if(i >= 5){
-                i = 0;
+        if(pthread_create(&thread_id[i], NULL, sender, (&new_fd[i])) != 0){
+            printf("thread creation failed\n");
+        }
+        i++;
+        if(i >= 5){
+            for(int j=0;j<=i;j++)
+            {
+                pthread_join(thread_id[j], NULL);
             }
-            size_t ln = strlen(buf)-1;
-            if (buf[ln] == '\n') {
-                buf[ln] = '\0';
-            }
-            char command[5];
-            int j;
-            for(j = 0; buf[j] != ' ' && buf[j] != '\0'; ++j){
-                command[j] = buf[j];
-            }
-            command[j] = '\0';
-
-            if(!(strcmp(command, "PUSH"))) {
-                char copy[2048];
-                int k;
-                j = j+1;
-                for(k = 0; buf[j] != '\0'; ++k, ++j){
-                    copy[k] = buf[j];
-                }
-                copy[k] = '\0';
-                if(pthread_create(&thread_id[i], NULL, push, (void*)(copy)) != 0){
-                    printf("thread creation failed\n");
-                }
-
-                pthread_join(thread_id[i], NULL);
-                i++;
-
-            }else if(!(strcmp(command, "TOP"))) {
-                if (pthread_create(&thread_id[i], NULL, top, (void*)(&new_fd)) != 0) {
-                    printf("thread creation failed\n");
-                }
-                pthread_join(thread_id[i], NULL);
-                i++;
-
-            }else if(!(strcmp(command, "POP"))){
-                if(pthread_create(&thread_id[i], NULL, pop, (void*)(&new_fd)) != 0){
-                    printf("thread creation failed\n");
-                }
-                pthread_join(thread_id[i], NULL);
-                i++;
-            }else{
-                printf("ERROR: illegal command\n");
-                return -1;
-            }
+            i = 0;
         }
     }
-    printf("destroy stack\n");
-    destroy_stack(stack);
-    printf("close client socket\n");
-    close(new_fd);
-    printf("close socket\n");
-    close(sockfd);
-    printf("closing push mutex\n");
-    pthread_mutex_destroy(&mutex_push);
-    printf("closing top mutex\n");
-    pthread_mutex_destroy(&mutex_top);
-    printf("closing pop mutex\n");
-    pthread_mutex_destroy(&mutex_pop);
     return 0;
 }

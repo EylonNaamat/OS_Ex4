@@ -25,13 +25,13 @@ void *my_malloc(size_t get_size)
         {
             if(block->data_size>=get_size)
             {
-                block->free =1;
+                block->free =0;
                 return ((void*)block) + sizeof(block_info);
             }
         }
         block = block->next_block;
     }
-    printf("4......\n");
+
     block_info* new_block = (block_info*)sbrk(size);
     new_block->data_size=get_size;
     new_block->free = 0;
@@ -45,19 +45,22 @@ void my_free(void * my_point)
 {
     block_info* my_block =(block_info*)(my_point - sizeof(block_info));
     my_block->free =1;
+    int i = 0;
     if(my_point+((my_block->data_size))== sbrk(0))
     {
         while(my_block!=NULL)
         {
+            i++;
             if(my_block->free == 0)
             {
                 break;
             }
             else
             {
+                block_info* tmp = my_block->next_block;
                 sbrk(-(my_block->data_size+sizeof(block_info)));
+                my_block = tmp;
             }
-            my_block = my_block->next_block;
         }
         last_head = my_block;
     }

@@ -16,10 +16,16 @@ tests.o: tests.cpp
 tests: tests.o
 	g++ tests.o -o tests
 
-all: stack_server client tests
+stack.o: stack.cpp
+	g++ -c stack.cpp
+
+stack: stack.o
+	g++ stack.o -o stack
+
+all: stack_server client tests stack
 
 .PHONY: clean
 
 clean:
-	rm *.o stack_server client tests
+	rm *.o stack_server client tests stack
 

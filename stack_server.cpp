@@ -19,7 +19,7 @@
 #include <signal.h>
 #include <pthread.h>
 
-#define PORT "3427"  // the port users will be connecting to
+#define PORT "3490"  // the port users will be connecting to
 
 #define BACKLOG 10   // how many pending connections queue will hold
 
@@ -57,35 +57,12 @@ void *my_malloc(size_t get_size)
     return ((void*)new_block) +sizeof(block_info);
 }
 
-// void *my_calloc(size_t get_numbers,size_t get_one_size)
-// {
-//     size_t get_size = get_one_size*get_numbers;
-//     block_info* block= last_head;
-//     size_t size = get_size + sizeof(block_info);
-//     while (block!= NULL)
-//     {
-//         if(block->free != 0)
-//         {
-//             if(block->data_size>=get_size)
-//             {
-//                 block->free =0;
-//                 for(int i=0;i<get_size;i++)
-//                 {
-//                     *(((void*)block)+sizeof(block_info)+i) = 0;
-//                 }
-//                 return ((void*)block) + sizeof(block_info);
-//             }
-//         }
-//         block = block->next_block;
-//     }
 
-//     block_info* new_block = (block_info*)sbrk(size);
-//     new_block->data_size=get_size;
-//     new_block->free = 0;
-//     new_block->next_block =last_head;
-//     last_head = new_block;
-//     return ((void*)new_block) +sizeof(block_info);
-// }
+void *my_calloc(size_t get_numbers,size_t get_one_size){
+    void* ptr = my_malloc(get_numbers*get_one_size);
+    memset(ptr, 0, get_numbers*get_one_size);
+    return ptr;
+}
 
 void my_free(void * my_point)
 {
@@ -131,8 +108,6 @@ typedef struct Stack{
 
 ////// global variables
 pthread_mutex_t mutex;
-//pthread_mutex_t mutex_top;
-//pthread_mutex_t mutex_pop;
 stack_point stack;
 int new_fd[10];
 

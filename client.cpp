@@ -10,7 +10,7 @@
 #include <arpa/inet.h>
 
 
-#define PORT_NUM 3427
+#define PORT_NUM 3490
 
 int main(){
     int my_sock = socket(AF_INET, SOCK_STREAM, 0);

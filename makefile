@@ -1,8 +1,8 @@
-stack_server.o: stack_server.cpp
-	g++ -c stack_server.cpp
+server.o: server.cpp
+	g++ -c server.cpp
 
-stack_server: stack_server.o
-	g++ stack_server.o -o stack_server -pthread
+server: server.o
+	g++ server.o -o server -pthread
 
 client.o: client.cpp
 	g++ -c client.cpp
@@ -22,10 +22,10 @@ stack.o: stack.cpp
 stack: stack.o
 	g++ stack.o -o stack
 
-all: stack_server client tests stack
+all: server client tests stack
 
 .PHONY: clean
 
 clean:
-	rm *.o stack_server client tests stack
+	rm *.o server client tests stack
 

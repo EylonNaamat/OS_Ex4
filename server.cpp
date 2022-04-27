@@ -19,7 +19,7 @@
 #include <signal.h>
 #include <pthread.h>
 
-#define PORT "3490"  // the port users will be connecting to
+#define PORT "3498"  // the port users will be connecting to
 
 #define BACKLOG 10   // how many pending connections queue will hold
 
@@ -88,18 +88,20 @@ void my_free(void * my_point)
         last_head = my_block;
     }
 }
-/////////end free and maloc
+/////////end free and malloc
 
 
 /////////// stack
 typedef struct Stack_node{
     char* data;
     struct Stack_node* next;
+    struct Stack_node* prev;
 
 }Stack_node, *stack_node_point;
 
 typedef struct Stack{
     stack_node_point head;
+    stack_node_point tail;
     int capacity;
 } Stack, *stack_point;
 
@@ -117,6 +119,7 @@ stack_point init_stack(){
     stack_point new_stack = (stack_point)(my_malloc(sizeof(Stack)));
     if(new_stack){
         new_stack->head = NULL;
+        new_stack->tail = NULL;
         new_stack->capacity = 0;
     }
     return new_stack;
@@ -129,7 +132,13 @@ void* push(char* data){
         char* copy = (char*)(my_malloc(strlen(data) +1));
         strcpy(copy, data);
         new_elem->data = copy;
-        new_elem->next = stack->head;
+        new_elem->next = NULL;
+        new_elem->prev = stack->head;
+        if(stack->head == NULL){
+            stack->tail = new_elem;
+        }else{
+            stack->head->next = new_elem;
+        }
         stack->head = new_elem;
         (stack->capacity)++;
     }
@@ -140,7 +149,13 @@ bool pop(){
     pthread_mutex_lock(&mutex);
     if(stack->capacity != 0){
         stack_node_point top = stack->head;
-        stack->head = stack->head->next;
+        if(stack->capacity == 1){
+            stack->tail = NULL;
+        }
+        stack->head = stack->head->prev;
+        if(stack->head != NULL){
+            stack->head->next = NULL;
+        }
         my_free(top->data);
         my_free(top);
         (stack->capacity)--;
@@ -180,6 +195,45 @@ void clear(stack_point curr_stack){
 void destroy_stack(stack_point curr_stack){
     clear(curr_stack);
     my_free(curr_stack);
+}
+
+void* enqueue(char* data){
+    pthread_mutex_lock(&mutex);
+    stack_node_point new_elem = (stack_node_point)(my_malloc(sizeof(Stack_node)));
+    if(new_elem){
+        char* copy = (char*)(my_malloc(strlen(data) +1));
+        strcpy(copy, data);
+        new_elem->data = copy;
+        new_elem->next = stack->tail;
+        new_elem->prev = NULL;
+        if(stack->tail == NULL){
+            stack->head = new_elem;
+        }else{
+            stack->tail->prev = new_elem;
+        }
+        stack->tail = new_elem;
+        (stack->capacity)++;
+    }
+    pthread_mutex_unlock(&mutex);
+}
+
+bool dequeue(){
+    pthread_mutex_lock(&mutex);
+    if(stack->capacity != 0){
+        stack_node_point top = stack->tail;
+        if(stack->capacity == 1){
+            stack->head = NULL;
+        }
+        stack->tail = stack->tail->next;
+        my_free(top->data);
+        my_free(top);
+        (stack->capacity)--;
+        pthread_mutex_unlock(&mutex);
+        return true;
+    }else{
+        pthread_mutex_unlock(&mutex);
+        return false;
+    }
 }
 //////////end stack
 
@@ -258,7 +312,25 @@ void* sender(void* arg)
             }
         }else if(!(strcmp(command, "EXIT"))){
             break;
-        }else{
+        }else if(!(strcmp(command, "ENQUEUE"))){
+            char copy[2048];
+            int k;
+            j = j+1;
+            for(k = 0; buf[j] != '\0'; ++k, ++j){
+                copy[k] = buf[j];
+            }
+            copy[k] = '\0';
+            enqueue(copy);
+        }else if(!(strcmp(command, "DEQUEUE"))){
+            if(dequeue())
+            {
+                send((*new_fd), "OUTPUT: dequeuing", 2048, 0);
+            }
+            else{
+                send((*new_fd), "ERROR: stack is empty", 2048, 0);
+            }
+        }
+        else{
             printf("ERROR: illegal command\n");
             break;
         }
